@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TalentBridge — Employer & Employee Network</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background: linear-gradient(145deg, #0f172a, #1e293b);
+      color: #e2e8f0;
+    }
+    .container { width: min(1100px, 94vw); margin: 2rem auto; }
+    .hero { margin-bottom: 1rem; }
+    .hero h1 { margin: 0; font-size: 2rem; }
+    .hero p { color: #94a3b8; margin: 0.4rem 0 0; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1rem; }
+    .card {
+      border: 1px solid #334155;
+      border-radius: 14px;
+      background: rgba(15,23,42,0.9);
+      padding: 1rem;
+    }
+    h2 { margin-top: 0; font-size: 1.15rem; }
+    form { display: grid; gap: 0.5rem; }
+    input, textarea, button {
+      width: 100%; border-radius: 10px; border: 1px solid #475569;
+      background: #0b1220; color: #f8fafc; padding: 0.62rem 0.75rem;
+    }
+    textarea { min-height: 74px; resize: vertical; }
+    button { cursor: pointer; border: 0; font-weight: 600; background: #3b82f6; color: #e0f2fe; }
+    .list { margin: 0.8rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.5rem; }
+    .item { border: 1px solid #334155; border-radius: 10px; padding: 0.75rem; background: #0f172a; }
+    .item h3 { margin: 0 0 0.3rem; font-size: 1rem; }
+    .muted { color: #94a3b8; font-size: 0.9rem; }
+    .skills { display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.45rem; }
+    .tag { font-size: 0.8rem; background:#1d4ed8; color:#dbeafe; padding:0.18rem 0.5rem; border-radius:999px; }
+    .actions { margin-top: 0.6rem; display:flex; gap:0.4rem; }
+    .delete { background: #ef4444; color: #fee2e2; }
+    .match { background: #16a34a; color: #dcfce7; }
+    .full { grid-column: 1 / -1; }
+    @media (max-width: 850px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="hero">
+      <h1>TalentBridge</h1>
+      <p>Mini professional networking app to connect employers and employees by skills.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Create Employee Profile</h2>
+        <form id="employee-form">
+          <input id="employee-name" placeholder="Employee name" required maxlength="80" />
+          <input id="employee-title" placeholder="Title (e.g. Frontend Developer)" required maxlength="80" />
+          <input id="employee-skills" placeholder="Skills (comma separated)" required maxlength="160" />
+          <button type="submit">Add Employee</button>
+        </form>
+        <ul id="employee-list" class="list"></ul>
+      </article>
+
+      <article class="card">
+        <h2>Post Employer Job</h2>
+        <form id="job-form">
+          <input id="company-name" placeholder="Company name" required maxlength="80" />
+          <input id="job-title" placeholder="Role title" required maxlength="80" />
+          <input id="job-skills" placeholder="Required skills (comma separated)" required maxlength="160" />
+          <textarea id="job-desc" placeholder="Short role description" maxlength="300"></textarea>
+          <button type="submit">Post Job</button>
+        </form>
+        <ul id="job-list" class="list"></ul>
+      </article>
+
+      <article class="card full">
+        <h2>Skill Matches</h2>
+        <p class="muted" id="match-count">0 possible matches</p>
+        <ul id="match-list" class="list"></ul>
+      </article>
+    </section>
+  </div>
+
+  <script>
+    const store = {
+      load: key => JSON.parse(localStorage.getItem(key) || '[]'),
+      save: (key, value) => localStorage.setItem(key, JSON.stringify(value))
+    };
+
+    let employees = store.load('tb_employees');
+    let jobs = store.load('tb_jobs');
+
+    const employeeForm = document.getElementById('employee-form');
+    const jobForm = document.getElementById('job-form');
+    const employeeList = document.getElementById('employee-list');
+    const jobList = document.getElementById('job-list');
+    const matchList = document.getElementById('match-list');
+    const matchCount = document.getElementById('match-count');
+
+    const parseSkills = value => value.split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
+
+    function renderEmployees() {
+      employeeList.innerHTML = '';
+      employees.forEach(person => {
+        const li = document.createElement('li');
+        li.className = 'item';
+        li.innerHTML = `
+          <h3>${person.name}</h3>
+          <div class="muted">${person.title}</div>
+          <div class="skills">${person.skills.map(s => `<span class="tag">${s}</span>`).join('')}</div>
+          <div class="actions"><button class="delete" data-id="${person.id}" data-type="employee">Delete</button></div>
+        `;
+        employeeList.appendChild(li);
+      });
+    }
+
+    function renderJobs() {
+      jobList.innerHTML = '';
+      jobs.forEach(job => {
+        const li = document.createElement('li');
+        li.className = 'item';
+        li.innerHTML = `
+          <h3>${job.role} @ ${job.company}</h3>
+          <div class="muted">${job.description || 'No description provided'}</div>
+          <div class="skills">${job.skills.map(s => `<span class="tag">${s}</span>`).join('')}</div>
+          <div class="actions"><button class="delete" data-id="${job.id}" data-type="job">Delete</button></div>
+        `;
+        jobList.appendChild(li);
+      });
+    }
+
+    function renderMatches() {
+      const matches = [];
+      employees.forEach(person => {
+        jobs.forEach(job => {
+          const overlap = person.skills.filter(skill => job.skills.includes(skill));
+          if (overlap.length) {
+            matches.push({ person, job, overlap });
+          }
+        });
+      });
+
+      matchList.innerHTML = '';
+      matches.forEach(({ person, job, overlap }) => {
+        const li = document.createElement('li');
+        li.className = 'item';
+        li.innerHTML = `
+          <h3>${person.name} ↔ ${job.company} (${job.role})</h3>
+          <div class="muted">Shared skills: ${overlap.join(', ')}</div>
+          <div class="actions"><button class="match" type="button">Suggested connection</button></div>
+        `;
+        matchList.appendChild(li);
+      });
+
+      matchCount.textContent = `${matches.length} possible match${matches.length === 1 ? '' : 'es'}`;
+    }
+
+    function persist() {
+      store.save('tb_employees', employees);
+      store.save('tb_jobs', jobs);
+    }
+
+    employeeForm.addEventListener('submit', e => {
+      e.preventDefault();
+      employees.unshift({
+        id: crypto.randomUUID(),
+        name: document.getElementById('employee-name').value.trim(),
+        title: document.getElementById('employee-title').value.trim(),
+        skills: parseSkills(document.getElementById('employee-skills').value)
+      });
+      persist();
+      employeeForm.reset();
+      refresh();
+    });
+
+    jobForm.addEventListener('submit', e => {
+      e.preventDefault();
+      jobs.unshift({
+        id: crypto.randomUUID(),
+        company: document.getElementById('company-name').value.trim(),
+        role: document.getElementById('job-title').value.trim(),
+        description: document.getElementById('job-desc').value.trim(),
+        skills: parseSkills(document.getElementById('job-skills').value)
+      });
+      persist();
+      jobForm.reset();
+      refresh();
+    });
+
+    document.body.addEventListener('click', e => {
+      if (!(e.target instanceof HTMLElement) || !e.target.classList.contains('delete')) return;
+      const { id, type } = e.target.dataset;
+      if (type === 'employee') employees = employees.filter(p => p.id !== id);
+      if (type === 'job') jobs = jobs.filter(j => j.id !== id);
+      persist();
+      refresh();
+    });
+
+    function refresh() {
+      renderEmployees();
+      renderJobs();
+      renderMatches();
+    }
+
+    refresh();
+  </script>
+</body>
+</html>
